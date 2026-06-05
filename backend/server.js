@@ -14,30 +14,46 @@ const app = express();
 app.use(helmet());
 
 // ── CORS ──────────────────────────────────────────────
+const allowedOrigins = [
+  'https://arumachwanzyum.netlify.app',
+  'https://gorgeous-banoffee-984817.netlify.app',
+  'http://localhost:5173',
+  'http://localhost:3000',
+  process.env.CLIENT_URL,
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  origin: (origin, callback) => {
+    // Izinkan request tanpa origin (Postman, mobile, dll)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`CORS: origin ${origin} tidak diizinkan`));
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
 }));
 
+// Handle preflight OPTIONS untuk semua route
+app.options('*', cors());
+
 // ── Rate limiting ─────────────────────────────────────
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 menit
+  windowMs: 15 * 60 * 1000,
   max: 100,
   message: { success: false, message: 'Terlalu banyak request, coba lagi nanti.' },
 });
 app.use('/api', limiter);
 
-// Lebih ketat untuk review submission (anti spam)
 const reviewLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 jam
+  windowMs: 60 * 60 * 1000,
   max: 10,
   message: { success: false, message: 'Kamu udah kasih terlalu banyak ulasan, coba lagi nanti ya~' },
 });
 
 // ── Body parser ───────────────────────────────────────
-// limit 10mb untuk gambar base64
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -64,7 +80,6 @@ app.use((_req, res) => {
 });
 
 // ── Global error handler ──────────────────────────────
-// eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {
   console.error('❌ Error:', err.stack);
   res.status(err.status || 500).json({
